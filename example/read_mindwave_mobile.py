@@ -5,6 +5,7 @@ from mindwavemobile.MindwaveDataPointReader import MindwaveDataPointReader
 import textwrap
 
 if __name__ == '__main__':
+#    mindwaveDataPointReader = MindwaveDataPointReader('20:68:9D:3F:4F:88')
     mindwaveDataPointReader = MindwaveDataPointReader()
     mindwaveDataPointReader.start()
     if (mindwaveDataPointReader.isConnected()):    
