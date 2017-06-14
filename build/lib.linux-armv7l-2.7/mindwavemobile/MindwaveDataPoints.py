@@ -1,8 +1,8 @@
-
+   
 class DataPoint:
     def __init__(self, dataValueBytes):
         self._dataValueBytes = dataValueBytes
-
+                
 class PoorSignalLevelDataPoint(DataPoint):
     def __init__(self, dataValueBytes):
         DataPoint.__init__(self, dataValueBytes)
@@ -17,19 +17,13 @@ class PoorSignalLevelDataPoint(DataPoint):
             poorSignalLevelString += " - NO CONTACT TO SKIN"
         return poorSignalLevelString
 
-    def value(self):
-        return int(self.amountOfNoise)
-
 class AttentionDataPoint(DataPoint):
     def __init__(self, _dataValueBytes):
         DataPoint.__init__(self, _dataValueBytes)
-        self.attentionValue = self._dataValueBytes[0]
+        self.attentionValue = self._dataValueBytes[0] 
 
     def __str__(self):
         return "Attention Level: " + str(self.attentionValue)
-
-    def value(self):
-        return int(self.attentionValue)
 
 class MeditationDataPoint(DataPoint):
     def __init__(self, _dataValueBytes):
@@ -38,9 +32,6 @@ class MeditationDataPoint(DataPoint):
 
     def __str__(self):
         return "Meditation Level: " + str(self.meditationValue)
-
-    def value(self):
-        return int(self.meditationValue)
 
 class BlinkDataPoint(DataPoint):
     def __init__(self, _dataValueBytes):
@@ -72,7 +63,7 @@ class EEGPowersDataPoint(DataPoint):
     def __init__(self, dataValueBytes):
         DataPoint.__init__(self, dataValueBytes)
         self._rememberEEGValues();
-
+        
     def _rememberEEGValues(self):
         self.delta = self._convertToBigEndianInteger(self._dataValueBytes[0:3]);
         self.theta = self._convertToBigEndianInteger(self._dataValueBytes[3:6]);
@@ -94,7 +85,7 @@ class EEGPowersDataPoint(DataPoint):
          (((1 << 16) - 1) & (threeBytes[1] << 8)) |\
           ((1 << 8) - 1) & threeBytes[2]
         return bigEndianInteger
-
+        
     def __str__(self):
         return """EEG Powers:
                 delta: {self.delta}

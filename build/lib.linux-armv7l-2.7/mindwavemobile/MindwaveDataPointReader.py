@@ -22,14 +22,14 @@ class MindwaveDataPointReader:
 
     def _moreDataPointsInQueue(self):
         return len(self._dataPointQueue) > 0
-
+    
     def _getDataPointFromQueue(self):
         return self._dataPointQueue.pop();
-
+    
     def _putNextDataPointsInQueue(self):
         dataPoints = self._readDataPointsFromOnePacket()
         self._dataPointQueue.extend(dataPoints)
-
+    
     def _readDataPointsFromOnePacket(self):
         self._goToStartOfNextPacket()
         payloadBytes, checkSum = self._readOnePacket()
@@ -40,7 +40,7 @@ class MindwaveDataPointReader:
             dataPoints = self._readDataPointsFromPayload(payloadBytes)
         self._mindwaveMobileRawReader.clearAlreadyReadBuffer()
         return dataPoints;
-
+        
     def _goToStartOfNextPacket(self):
         while(True):
             byte = self._mindwaveMobileRawReader.getByte()
@@ -54,7 +54,7 @@ class MindwaveDataPointReader:
             payloadLength = self._readPayloadLength();
             payloadBytes, checkSum = self._readPacket(payloadLength);
             return payloadBytes, checkSum
-
+    
     def _readPayloadLength(self):
         payloadLength = self._mindwaveMobileRawReader.getByte()
         return payloadLength
@@ -69,10 +69,14 @@ class MindwaveDataPointReader:
         lastEightBits = sumOfPayload % 256
         invertedLastEightBits = self._computeOnesComplement(lastEightBits) #1's complement!
         return invertedLastEightBits == checkSum;
-
+    
     def _computeOnesComplement(self, lastEightBits):
         return ~lastEightBits + 256
-
+        
     def _readDataPointsFromPayload(self, payloadBytes):
         payloadParser = MindwavePacketPayloadParser(payloadBytes)
         return payloadParser.parseDataPoints();
+    
+    
+    
+    
