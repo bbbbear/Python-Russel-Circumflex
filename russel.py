@@ -13,9 +13,6 @@ from bbearClass import QUEUE, PULSEIBI, THREADRUN
 import numpy as np
 
 
-attention = None
-meditaton = None
-poorSignal = None
 newFlag = False
 
 
@@ -23,32 +20,28 @@ newFlag = False
 threadRun = THREADRUN()
 
 
-def getSignal(mindwaveDataPointReader,cond,threadRun, IBI):
-    global attention
-    global meditaton
-    global poorSignal
+def getSignal(mindwaveDataPointReader,cond,threadRun,queue, IBI):
     global newFlag
     count = 0
     while(threadRun.status()):
         dataPoint = mindwaveDataPointReader.readNextDataPoint()
         if(dataPoint.__class__ is AttentionDataPoint):
             #print 'AT:',dataPoint.value()
-            tmp_attention = dataPoint.value()
+            attention = dataPoint.value()
             count += 1
         elif(dataPoint.__class__ is MeditationDataPoint):
-            tmp_meditaton = dataPoint.value()
+            meditaton = dataPoint.value()
             #print 'MD:',dataPoint.value()
             count += 1
         elif(dataPoint.__class__ is PoorSignalLevelDataPoint):
-            tmp_poorSignal = dataPoint.value()
+            poorSignal = dataPoint.value()
             #print 'POOR:',dataPoint.value()
             count += 1
+        #If all of 3 inputs come
         if (count == 3):
             count = 0
             cond.acquire()
-            meditaton = tmp_meditaton
-            attention = tmp_attention
-            poorSignal = tmp_poorSignal
+            queue.put([poorSignal,meditaton,attention,IBI.getBPM(), IBI.getHRVthresholded()])
             newFlag = True
             cond.notify()
             cond.release()
@@ -58,12 +51,10 @@ def getSignal(mindwaveDataPointReader,cond,threadRun, IBI):
     return
 
 def main():
-    global attention
-    global meditaton
-    global poorSignal
     global newFlag
     global threadRun
     IBI = PULSEIBI()
+    queue = QUEUE()
 
     bv_condition = threading.Condition()
     #Try to connect to the predefined device
@@ -77,13 +68,13 @@ def main():
     ThreadStarted = 0
     if (mindwaveDataPointReader.isConnected()):
         try:
-            pl = threading.Thread(target=pulse.pulsePNN,name="Pulse sensor reader",args=(0,0,threadRun, IBI))
+            pl = threading.Thread(target=pulse.pulsePNN,name="Pulse sensor reader",args=(0, 0, threadRun, IBI))
             pl.daemon = True
             pl.start()
             ThreadStarted = 1
             print ("Reading pulse sensor thread is started")
             try:
-                mv = threading.Thread(target=getSignal,name="mind wave reader",args=(mindwaveDataPointReader,bv_condition,threadRun, IBI))
+                mv = threading.Thread(target=getSignal,name="mind wave reader",args=(mindwaveDataPointReader,bv_condition,threadRun, queue,IBI))
                 mv.daemon = True
                 mv.start()
                 ThreadStarted = 2
@@ -94,24 +85,22 @@ def main():
                 e = sys.exc_info()[0]
                 print ("Can not start the mind wave reader thread",e)
                 threadRun.stop()
+                return
         except:
             e = sys.exc_info()[0]
             print ("Can not start the pulse sensor reader thread",e)
             threadRun.stop()
-        prev = datetime.now()
+            return
+
         while threadRun.status():
             bv_condition.acquire()
-            if newFlag:
-                #mutex.acquire()
-                now = datetime.now()
-                print "data:", attention, meditaton, poorSignal, pulse.pNN50, pulse.BPM, "\tDifftime: ", (now-prev).total_seconds()
-                newFlag = False
-                prev = now
-                #mutex.release()
-                #time.sleep(0.5)
-            else:
+            while not newFlag:
                 bv_condition.wait()
+            print queue.getAll()
+            #print "data:", attention, meditaton, poorSignal, pulse.pNN50, pulse.BPM, "\tDifftime: ", (now-prev).total_seconds()
+            newFlag = False
             bv_condition.release()
+
         if ThreadStarted == 1:
             if pl.isAlive():
                 pl.join(5)

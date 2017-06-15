@@ -1,3 +1,5 @@
+import threading
+
 class THREADRUN():
     run = True
     def start(self):
@@ -11,33 +13,44 @@ class THREADRUN():
 
 class QUEUE():
     def __init__(self,maxsize = 100):
-        if size < 1:
+        if maxsize < 1:
             print('Err, max-size of queue must greather than 1')
         self.__size = maxsize
         self.__item = []
         self.__len = 0
+        #self.__lock = threading.Lock()
 
     def put(self,item):
-        if self.__len < maxsize:
+        #self.__lock.acquire()
+        if self.__len < self.__size:
             self.__item.append(item)
             self.__len += 1
         else:
             print('Queue is full, input discarded')
+        #self.__lock.release()
 
     def get(self):
+        #self.__lock.acquire()
         if self.__len > 0:
             self.__len -= 1
-            return self.__item.pop(0)
+            ret = self.__item.pop(0)
+            #self.__lock.release()
+            return ret
         else:
+            #self.__lock.release()
             print 'Err, No data'
             return None
 
     def getAll(self):
+        #self.__lock.acquire()
         if self.__len > 0:
-            ret = self.__item[:self.__len]
+            ret = list(self.__item)
+            self.__item = []
             self.__len = 0
+            #self.__lock.release()
             return ret
         else:
+            #self.__lock.release()
             print 'Err, No data'
             return None
 
@@ -63,13 +76,16 @@ class PULSEIBI():
             self.__HRV_thres = HRV_threshold
 
         self.__size = size
-
+        self.__lock = threading.Lock()
 
     def put(self,newIBI):
+        self.__lock.acquire()
         if newIBI < 0:
+            self.__lock.release()
             print('Err, the IBI must be positive value. Input discarded')
             return
         #PUT new IBI data into a Circular array
+
         self.__IBI_array[self.__IBI_tail] = newIBI
         #Count the IBI data
         if self.__IBI_count < self.__size:
@@ -77,7 +93,7 @@ class PULSEIBI():
 
         #Thresholding the HRV
         if self.__IBI_count > 1:
-            if (self.__IBI_array[self.__IBI_tail] - self.__IBI_array[self.__IBI_tail - 1])**2 > 2500:
+            if (newIBI - self.__IBI_array[self.__IBI_tail - 1])**2 > 2500:
                 self.__HRV_thresholded_array[self.__HRV_tail] = 1
             else:
                 self.__HRV_thresholded_array[self.__HRV_tail] = 0
@@ -87,32 +103,47 @@ class PULSEIBI():
 
             self.__HRV_tail = (self.__HRV_tail + 1) % self.__size   #Next tail calculation
         self.__IBI_tail = (self.__IBI_tail + 1) % self.__size       #Next tail calculation
+        self.__lock.release()
 
     def getHRVthresholded(self):
+        self.__lock.acquire()
         if self.__IBI_count != self.__size:
-            print('Err, the IBI data is not enough')
+            self.__lock.release()
+            print 'Err, the IBI data has only',self.__IBI_count, 'of', self.__size, '[Return None]'
             return None
         else:
-            return sum(self.___HRV_thresholded_array)/self.__size
+            ret = float(sum(self.__HRV_thresholded_array))/self.__size
+            self.__lock.release()
+            return ret
 
     def getAll(self):
-        return self.__IBI_array[self.__IBI_tail:] + self.__IBI_array[:self.__IBI_tail]
+        self.__lock.acquire()
+        ret = self.__IBI_array[self.__IBI_tail:] + self.__IBI_array[:self.__IBI_tail]
+        self.__lock.release()
+        return ret
 
     def getBPM(self,n=10):
+        self.__lock.acquire()
         if self.__IBI_count < n:
-            print 'Err, the IBI data has only',self.__IBI_count, '.Return None'
+            self.__lock.release()
+            print 'Err, the IBI data has only',self.__IBI_count, 'of',n, '[Return None]'
             return None
-        if (self.__size - self.__IBI_tail) >= n:
-            return self.__findBPM(self.__IBI_array[self.__tail:self.__tail+n])
+        if self.__IBI_count < self.__size:
+            ret = self.__findBPM(self.__IBI_array[self.__IBI_tail-n:self.__IBI_tail])
+        elif (self.__size - self.__IBI_tail) >= n:
+            ret = self.__findBPM(self.__IBI_array[self.__IBI_tail:self.__IBI_tail+n])
         else:
             overlap = self.__IBI_tail - self.__size + n
-            return self.__findBPM(self.__IBI_array[self.__IBI_tail:]+self.__IBI_array[:overlap])
+            ret = self.__findBPM(self.__IBI_array[self.__IBI_tail:]+self.__IBI_array[:overlap])
+        self.__lock.release()
+        return ret
 
     def __findBPM(self,data):
         return 60000.0/(sum(data)/len(data))
 
 
     def reset(self):
+        self.__lock.acquire()
         self.__IBI_array = [0]*self.__size
         self.__IBI_count = 0
         self.__IBI_tail = 0
@@ -120,3 +151,4 @@ class PULSEIBI():
         self.__HRV_thresholded_array = [0]*self.__size
         self.__HRV_count = 0
         self.__HRV_tail = 0
+        self.__lock.release()
