@@ -1,8 +1,8 @@
 import spidev
 import time
 import numpy as np
-from bbearClass import QUEUE, PULSEIBI, THREADRUN
-
+from bbearClass import PULSEIBI, THREADRUN
+from datetime import datetime
 
 BPM = None
 pNN50 = None
@@ -32,91 +32,109 @@ def get_adc(spi,channel):
     ret = ((r[1]&31) << 6) + (r[2] >> 2)
     return ret
 
-def pulsePNN(spi_ch,adc_ch,threadRun,IBI:PULSEIBI):
-#    log = open("log.csv","w")
-#    log.write('Raw,Signal,Low,Peak\n')
-    lastBeatTime = 0
+def pulsePNN(spi_ch,adc_ch,threadRun,IBI):
+    #log = open("log.csv","w")
+    #log.write('Actual,Raw,Low,Peak,IBI UPDATE,threshold,amplitude\n')
+    #lastBeatTime = 0
     #The peak and through will be used for finding the amplitude of a pulse wave
     peak = 600      #peak of the pulse wave
     through = 600   #lowest value of the pulse wave
-    amplitude = 100
+    amplitude = 600
     threshold = 600 #The threshold of acceptable pulse wave
-    timerCounter = 0
+    newIBI = 0
     pulse = False
     ignoredBeat = False
     ignoredCount = 0 #Ignored 10 beats
-    firstUsedBeat = False
-    #pNN_data = np.zeros((30),dtype=np.uint8)
-    pNN_data = 0
-    pNN_count = 0
-
 
     #SPI initialization
     spi = spidev.SpiDev()
     spi.open(0,spi_ch)
     spi.max_speed_hz = 1200000
-
+    lastBeatTime = datetime.now()
     while threadRun.status():
         signal = get_adc(spi,adc_ch)
-#        log.write(str(signal))
+        now = datetime.now()
+        timePeriod = int((now - lastBeatTime).total_seconds()*1000)
+    #    log.write(str(timePeriod)+','+str(signal))
         #print 'Raw',signal
-        N = timerCounter - lastBeatTime
-
+        #N = timerCounter - lastBeatTime
+        flag_1 = False
+        flag_2 = False
+        resetFlag = False
         if(signal > peak):
             #signal is greather than threshold, trying to update the peak
             peak = signal
-#            log.write(',0,'+str(signal))
+    #        log.write(',0,'+str(signal))
+            flag_1 = True
 
         #avoiding dicrotic notch by waiting 60% of last IBI
-        if (N > newIBI*0.6):
+        if (timePeriod > newIBI*0.6):
             #updating the peak and the through of a signal
             if(signal < threshold):
                 #signal is lower than threshold, trying to update the through
                 if (signal < through):
                     through = signal
-#                    log.write(','+str(signal)+',0')
+    #                log.write(','+str(signal)+',0')
+                    flag_1 = True
                     #print 'New through: ',through
 
             #waiting for at least 250ms before determinding the pulse wave to avoid the noise
-            if N > 250:
+            if timePeriod > 250:
                 if (signal > threshold) and not pulse:
                     pulse = True
-                    newIBI = timerCounter - lastBeatTime
-                    lastBeatTime = timerCounter
+                    flag_2 = True
+                    newIBI = timePeriod
+                    lastBeatTime = now
+    #                if flag_1:
+    #                    log.write(','+str(signal))
+    #                else:
+    #                    log.write(',,,'+str(signal))
 
                     if ignoredBeat:
                         if ignoredCount <= 10:
                             ignoredCount += 1
                         else:
                             ignoredBeat = False
+    #                    log.write(','+str(threshold)+','+str(amplitude)+'\n')
                         time.sleep(0.002)
                         #print 'First beat'
                         continue
                     else:
                         IBI.put(newIBI)
 
-        #threshold adustment
+        #threshold adustment, wait for a falling edge then ask for the peak recorded
         if signal < threshold and pulse:
             pulse = False
-            threshold = ((peak-through)/2.0) + through
-            peak = threshold
-            through = threshold
+            amplitude = peak-through
+            if amplitude < 250 and peak < 600:
+                print 'No pulse detected, reset'
+                resetFlag = True
+            else:
+                threshold = (amplitude/2.0) + through
+                peak = threshold
+                through = threshold
         #if there is no beats in 2.5 seconds, reset the threshold by the default value
-        if N > 2500:
+        if timePeriod > 2500 or resetFlag:
             threshold = 600
             peak = 600
             through = 600
-            lastBeatTime = 0
-            timerCounter = 0
+            amplitude = 600
+            lastBeatTime = now
             ignoredBeat = True
             ignoredCount = 0
+            newIBI = 600
             IBI.reset()
             print ('RESET')
+    #    if not flag_1:
+    #        log.write(',,')
+    #    if not flag_2:
+    #        log.write(',')
+    #    log.write(','+str(threshold)+','+str(amplitude)+'\n')
 #        log.write('\n')
         IBI_prev = newIBI
         time.sleep(0.002)
-        timerCounter = timerCounter + 2
     print ('Exiting pulse sensor reader')
     spi.close()
+    #log.close()
     return
 #    log.close()
