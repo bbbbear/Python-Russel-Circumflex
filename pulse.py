@@ -91,7 +91,7 @@ def pulsePNN(spi_ch,adc_ch,threadRun,IBI):
     #                    log.write(',,,'+str(signal))
 
                     if ignoredBeat:
-                        if ignoredCount <= 10:
+                        if ignoredCount <= 5:
                             ignoredCount += 1
                         else:
                             ignoredBeat = False
@@ -106,11 +106,11 @@ def pulsePNN(spi_ch,adc_ch,threadRun,IBI):
         if signal < threshold and pulse:
             pulse = False
             amplitude = peak-through
-            if amplitude < 250 and peak < 600:
-                print 'No pulse detected, reset'
+            if amplitude < 500 and peak < 700:
+                print 'No pulse detected, reset', amplitude, peak, through, threshold
                 resetFlag = True
             else:
-                threshold = (amplitude/2.0) + through
+                threshold = (amplitude*0.6) + through
                 peak = threshold
                 through = threshold
         #if there is no beats in 2.5 seconds, reset the threshold by the default value

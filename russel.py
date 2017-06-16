@@ -41,7 +41,7 @@ def getSignal(mindwaveDataPointReader,cond,threadRun,queue, IBI):
         if (count == 3):
             count = 0
             cond.acquire()
-            queue.put([poorSignal,meditaton,attention,IBI.getBPM(), IBI.getHRVthresholded()])
+            queue.put([poorSignal,meditaton,attention,IBI.BPM(), IBI.pNNx()])
             newFlag = True
             cond.notify()
             cond.release()
@@ -93,6 +93,7 @@ def main():
             return
 
         while threadRun.status():
+            #Critical section
             bv_condition.acquire()
             while not newFlag:
                 bv_condition.wait()
@@ -100,6 +101,9 @@ def main():
             #print "data:", attention, meditaton, poorSignal, pulse.pNN50, pulse.BPM, "\tDifftime: ", (now-prev).total_seconds()
             newFlag = False
             bv_condition.release()
+            #End of Critical section
+            #The computation unit starts here!
+
 
         if ThreadStarted == 1:
             if pl.isAlive():

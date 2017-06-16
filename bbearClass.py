@@ -58,7 +58,8 @@ class QUEUE():
 
 
 class PULSEIBI():
-    def __init__(self,size=30,HRV_threshold = 2500):
+    #Use the Circular array to make sure that the most recent data will always be used
+    def __init__(self,size=30,pNNx = 50):
         if size < 10:
             print('Err, the size of PNNx must greather than 10. Set to default 30')
             size = 30
@@ -66,14 +67,14 @@ class PULSEIBI():
         self.__IBI_count = 0
         self.__IBI_tail = 0
 
-        self.__HRV_thresholded_array = [0]*size
-        self.__HRV_count = 0
-        self.__HRV_tail = 0
-        if HRV_threshold < 0:
+        self.__pNNx_array = [0]*size
+        self.__NN_count = 0
+        self.__pNNx_tail = 0
+        if pNNx < 0:
             print('Err, the threshold of HRV must greather than 0. Set to default 2500')
-            self.__HRV_thres = 2500
+            self.__pNNx_thres = pNNx**2
         else:
-            self.__HRV_thres = HRV_threshold
+            self.__pNNx_thres = pNNx**2
 
         self.__size = size
         self.__lock = threading.Lock()
@@ -91,28 +92,29 @@ class PULSEIBI():
         if self.__IBI_count < self.__size:
             self.__IBI_count += 1
 
-        #Thresholding the HRV
+        #Thresholding the HRV for pNN50
         if self.__IBI_count > 1:
-            if (newIBI - self.__IBI_array[self.__IBI_tail - 1])**2 > 2500:
-                self.__HRV_thresholded_array[self.__HRV_tail] = 1
+            #Check if consecutive NN intervals that differ by more than 50 ms
+            if (newIBI - self.__IBI_array[self.__IBI_tail - 1])**2 > self.__pNNx_thres:
+                self.__pNNx_array[self.__pNNx_tail] = 1
             else:
-                self.__HRV_thresholded_array[self.__HRV_tail] = 0
+                self.__pNNx_array[self.__pNNx_tail] = 0
 
-            if self.__HRV_count < self.__size:
-                self.__HRV_count += 1
+            if self.__NN_count < self.__size:
+                self.__NN_count += 1
 
-            self.__HRV_tail = (self.__HRV_tail + 1) % self.__size   #Next tail calculation
+            self.__pNNx_tail = (self.__pNNx_tail + 1) % self.__size   #Next tail calculation
         self.__IBI_tail = (self.__IBI_tail + 1) % self.__size       #Next tail calculation
         self.__lock.release()
 
-    def getHRVthresholded(self):
+    def pNNx(self):
         self.__lock.acquire()
         if self.__IBI_count != self.__size:
             self.__lock.release()
             print 'Err, the IBI data has only',self.__IBI_count, 'of', self.__size, '[Return None]'
             return None
         else:
-            ret = float(sum(self.__HRV_thresholded_array))/self.__size
+            ret = float(sum(self.__pNNx_array))/self.__size
             self.__lock.release()
             return ret
 
@@ -122,7 +124,7 @@ class PULSEIBI():
         self.__lock.release()
         return ret
 
-    def getBPM(self,n=10):
+    def BPM(self,n=10):
         self.__lock.acquire()
         if self.__IBI_count < n:
             self.__lock.release()
@@ -148,7 +150,7 @@ class PULSEIBI():
         self.__IBI_count = 0
         self.__IBI_tail = 0
 
-        self.__HRV_thresholded_array = [0]*self.__size
-        self.__HRV_count = 0
-        self.__HRV_tail = 0
+        self.__pNNx_array = [0]*self.__size
+        self.__NN_count = 0
+        self.__pNNx_tail = 0
         self.__lock.release()
