@@ -1,6 +1,8 @@
 bbbeear message: Sorry, I haven't give a good commit history. This project use the russell's circumflex model to determine your emotion.
 The implementation is based on Raspberry Pi 3 with python2 code
 
+----------------------------------------------------------
+
 Some scripts to access the data streamed by the **Neurosky Mindwave Mobile** Headset over Bluetooth on Linux.
 
 Requirements:
