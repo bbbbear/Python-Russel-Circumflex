@@ -1,15 +1,18 @@
 import threading
 
 class THREADRUN():
-    run = True
+    def __init__(self):
+        self.__run = True
     def start(self):
-        self.run = True
+        self.__run = True
     def stop(self):
-        self.run = False
+        self.__run = False
     def status(self):
-        return self.run
+        return self.__run
     def __str__(self):
-        return str(self.run)
+        return str(self.__run)
+    def __nonzero__(self):
+        return self.__run
 
 class QUEUE():
     def __init__(self,maxsize = 100):
@@ -154,3 +157,31 @@ class PULSEIBI():
         self.__NN_count = 0
         self.__pNNx_tail = 0
         self.__lock.release()
+
+class CIR_ARRAY():
+    def __init__(self,size):
+        self.__data = []
+        self.__index = 0
+        self.__count = 0
+        self.__size = size
+
+    def put(self, obj):
+        if self.__count < self.__size:
+            self.__data.append(list(obj))
+            self.__count += 1
+        else:
+            self.__data[self.__index] = list(obj)
+        self.__index = (self.__index + 1) % self.__size
+
+
+    def get(self,order=False):
+        if self.__count < self.__size:
+            return self.__data[:self.__index]
+        else:
+            if order:
+                return self.__data[self.__index:] + self.__data[:self.__index]
+            else:
+                return self.__data
+
+    def reset(self):
+        self.__init__(self.__size)
