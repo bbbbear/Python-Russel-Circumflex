@@ -1,19 +1,21 @@
 import threading
+import numpy as np
 
-class THREADRUN():
-    def __init__(self):
-        self.__run = True
-    def start(self):
-        self.__run = True
-    def stop(self):
-        self.__run = False
-    def status(self):
-        return self.__run
+class BOOL():
+    def __init__(self,value=True):
+        self.__bool = value
+    def true(self):
+        self.__bool = True
+    def false(self):
+        self.__bool = False
+    def get(self):
+        return self.__bool
     def __str__(self):
-        return str(self.__run)
+        return str(self.__bool)
     def __nonzero__(self):
-        return self.__run
+        return self.__bool
 
+#No lock, the queue is already locked by caller
 class QUEUE():
     def __init__(self,maxsize = 100):
         if maxsize < 1:
@@ -42,7 +44,7 @@ class QUEUE():
         else:
             #self.__lock.release()
             print 'Err, No data'
-            return None
+            return []
 
     def getAll(self):
         #self.__lock.acquire()
@@ -55,7 +57,7 @@ class QUEUE():
         else:
             #self.__lock.release()
             print 'Err, No data'
-            return None
+            return []
 
 
 
@@ -64,8 +66,8 @@ class PULSEIBI():
     #Use the Circular array to make sure that the most recent data will always be used
     def __init__(self,size=30,pNNx = 50):
         if size < 10:
-            print('Err, the size of PNNx must greather than 10. Set to default 30')
-            size = 30
+            print('Err, the size of PNNx must greather than 10. Set to minimum possible 10')
+            size = 10
         self.__IBI_array = [0]*size
         self.__IBI_count = 0
         self.__IBI_tail = 0
@@ -83,80 +85,90 @@ class PULSEIBI():
         self.__lock = threading.Lock()
 
     def put(self,newIBI):
-        self.__lock.acquire()
-        if newIBI < 0:
-            self.__lock.release()
-            print('Err, the IBI must be positive value. Input discarded')
-            return
-        #PUT new IBI data into a Circular array
+        with self.__lock:
+            #self.__lock.acquire()
+            if newIBI < 0:
+            #    self.__lock.release()
+                print('Err, the IBI must be positive value. Input discarded')
+                return
+            #PUT new IBI data into a Circular array
 
-        self.__IBI_array[self.__IBI_tail] = newIBI
-        #Count the IBI data
-        if self.__IBI_count < self.__size:
-            self.__IBI_count += 1
+            self.__IBI_array[self.__IBI_tail] = newIBI
+            #Count the IBI data
+            if self.__IBI_count < self.__size:
+                self.__IBI_count += 1
 
-        #Thresholding the HRV for pNN50
-        if self.__IBI_count > 1:
-            #Check if consecutive NN intervals that differ by more than 50 ms
-            if (newIBI - self.__IBI_array[self.__IBI_tail - 1])**2 > self.__pNNx_thres:
-                self.__pNNx_array[self.__pNNx_tail] = 1
-            else:
-                self.__pNNx_array[self.__pNNx_tail] = 0
+            #Thresholding the HRV for pNN50
+            if self.__IBI_count > 1:
+                #Check if consecutive NN intervals that differ by more than 50 ms
+                if (newIBI - self.__IBI_array[self.__IBI_tail - 1])**2 > self.__pNNx_thres:
+                    self.__pNNx_array[self.__pNNx_tail] = 1
+                else:
+                    self.__pNNx_array[self.__pNNx_tail] = 0
 
-            if self.__NN_count < self.__size:
-                self.__NN_count += 1
+                if self.__NN_count < self.__size:
+                    self.__NN_count += 1
 
-            self.__pNNx_tail = (self.__pNNx_tail + 1) % self.__size   #Next tail calculation
-        self.__IBI_tail = (self.__IBI_tail + 1) % self.__size       #Next tail calculation
-        self.__lock.release()
+                self.__pNNx_tail = (self.__pNNx_tail + 1) % self.__size   #Next tail calculation
+            self.__IBI_tail = (self.__IBI_tail + 1) % self.__size       #Next tail calculation
+            #self.__lock.release()
 
     def pNNx(self):
-        self.__lock.acquire()
-        if self.__IBI_count != self.__size:
-            self.__lock.release()
-            print 'Err, the IBI data has only',self.__IBI_count, 'of', self.__size, '[Return None]'
-            return None
-        else:
-            ret = float(sum(self.__pNNx_array))/self.__size
-            self.__lock.release()
-            return ret
+        with self.__lock:
+            #self.__lock.acquire()
+            if self.__IBI_count < 10:
+            #    self.__lock.release()
+                print 'Err, the IBI data has only',self.__IBI_count, 'of', 10, '[Return None]'
+                return None
+            else:
+                data = self.__pNNx_array[:self.__NN_count]
+                size = self.__NN_count
+            #else:
+            #    ret = float(sum(self.__pNNx_array))/self.__size
+        #        self.__lock.release()
+        return float(sum(data))/size
 
     def getAll(self):
-        self.__lock.acquire()
-        ret = self.__IBI_array[self.__IBI_tail:] + self.__IBI_array[:self.__IBI_tail]
-        self.__lock.release()
-        return ret
+        with self.__lock:
+            #self.__lock.acquire()
+            first = self.__IBI_array[self.__IBI_tail:]
+            second = self.__IBI_array[:self.__IBI_tail]
+            #self.__lock.release()
+        return first+second
 
     def BPM(self,n=10):
-        self.__lock.acquire()
-        if self.__IBI_count < n:
-            self.__lock.release()
-            print 'Err, the IBI data has only',self.__IBI_count, 'of',n, '[Return None]'
-            return None
-        if self.__IBI_count < self.__size:
-            ret = self.__findBPM(self.__IBI_array[self.__IBI_tail-n:self.__IBI_tail])
-        elif (self.__size - self.__IBI_tail) >= n:
-            ret = self.__findBPM(self.__IBI_array[self.__IBI_tail:self.__IBI_tail+n])
-        else:
-            overlap = self.__IBI_tail - self.__size + n
-            ret = self.__findBPM(self.__IBI_array[self.__IBI_tail:]+self.__IBI_array[:overlap])
-        self.__lock.release()
-        return ret
+        #self.__lock.acquire()
+        with self.__lock:
+            if self.__IBI_count < 10:
+            #    self.__lock.release()
+                print 'Err, the IBI data has only',self.__IBI_count, 'of',10, '[Return None]'
+                return None
+            #More than 10
+            if self.__IBI_count < self.__size:
+                ret = self.__findBPM(self.__IBI_array[self.__IBI_tail-n:self.__IBI_tail])
+            elif (self.__size - self.__IBI_tail) >= n:
+                ret = self.__findBPM(self.__IBI_array[self.__IBI_tail:self.__IBI_tail+n])
+            else:
+                overlap = self.__IBI_tail - self.__size + n
+                ret = self.__findBPM(self.__IBI_array[self.__IBI_tail:]+self.__IBI_array[:overlap])
+        #    self.__lock.release()
+            return ret
 
     def __findBPM(self,data):
         return 60000.0/(sum(data)/len(data))
 
 
     def reset(self):
-        self.__lock.acquire()
-        self.__IBI_array = [0]*self.__size
-        self.__IBI_count = 0
-        self.__IBI_tail = 0
+        with self.__lock:
+            #self.__lock.acquire()
+            self.__IBI_array = [0]*self.__size
+            self.__IBI_count = 0
+            self.__IBI_tail = 0
 
-        self.__pNNx_array = [0]*self.__size
-        self.__NN_count = 0
-        self.__pNNx_tail = 0
-        self.__lock.release()
+            self.__pNNx_array = [0]*self.__size
+            self.__NN_count = 0
+            self.__pNNx_tail = 0
+            #self.__lock.release()
 
 class CIR_ARRAY():
     def __init__(self,size):
@@ -185,3 +197,36 @@ class CIR_ARRAY():
 
     def reset(self):
         self.__init__(self.__size)
+
+#change to CIR_ARRAY
+class RAWPULSE():
+    def __init__(self,length=3,diff = -0.002):
+        self.__size = int(length*abs(1/diff))+1
+        self.__pulseData = [0]*self.__size
+        self.__pulseLabel = np.round(np.arange(0.000,-length+diff,diff),3).tolist()
+        self.__limit = -length-0.002
+        self.__lock = threading.Lock()
+        self.__head = self.__size
+
+    def put(self,data):
+        with self.__lock:
+            self.__head = (self.__head - 1)%self.__size
+            self.__pulseData[self.__head] = data
+
+    def label(self):
+        with self.__lock:
+            return self.__pulseLabel
+
+    def get(self):
+        with self.__lock:
+            first = self.__pulseData[self.__head:]
+            second = self.__pulseData[:self.__head]
+        return first+second
+
+    def reset(self):
+        with self.__lock:
+            self.__pulseData[:] = 0
+            self.__head = self.__size
+
+    def size(self):
+        return self.__size

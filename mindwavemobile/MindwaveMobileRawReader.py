@@ -1,6 +1,11 @@
+from __future__ import print_function
+
 import bluetooth
 import time
 import textwrap
+import os, signal
+
+from datetime import datetime
 
 
 class MindwaveMobileRawReader:
@@ -11,6 +16,9 @@ class MindwaveMobileRawReader:
         self._isConnected = False;
         self._mindwaveMobileAddress = address
 
+    def mac(self):
+        return self._mindwaveMobileAddress
+
     def connectToMindWaveMobile(self):
         # First discover mindwave mobile address, then connect.
         # Headset address of my headset was'9C:B7:0D:72:CD:02';
@@ -19,19 +27,25 @@ class MindwaveMobileRawReader:
         if (self._mindwaveMobileAddress is None):
             self._mindwaveMobileAddress = self._findMindwaveMobileAddress()
         if (self._mindwaveMobileAddress is not None):
-            print ("Connecting to predefined Mindwave Mobile...")
+            print ("Connecting to Mindwave Mobile...")
             if (self._connectToAddress(self._mindwaveMobileAddress)):
-                self._mindwaveMobileAddress = None
+                #self._mindwaveMobileAddress = None
+                return
         else:
             self._printErrorDiscoveryMessage()
 
-
-
     def _findMindwaveMobileAddress(self):
-        nearby_devices = bluetooth.discover_devices(lookup_names = True)
-        for address, name in nearby_devices:
-            if (name == "MindWave Mobile"):
-                return address
+        err_count = 0
+        while(err_count < 10):
+            nearby_devices = bluetooth.discover_devices(lookup_names = True)
+            for address, name in nearby_devices:
+                print('Discover:',name)
+                if (name == "MindWave Mobile"):
+                    print('Found ',address)
+                    return address
+            err_count += 1
+            print ("Attempt",err_count,"of 10: Could not find mindwave device; Retrying in 3s...")
+            time.sleep(3)
         return None
 
     def _connectToAddress(self, mindwaveMobileAddress):
@@ -43,17 +57,22 @@ class MindwaveMobileRawReader:
                 self.mindwaveMobileSocket.connect(
                     (mindwaveMobileAddress, 1))
                 self._isConnected = True
+                self.mindwaveMobileSocket.settimeout(1)
             except bluetooth.btcommon.BluetoothError as error:
                 err_count += 1
                 if err_count == 10:
-                    print "Attempt",err_count,"of 10: Could not connect:", error, ";"
+                    print ("Attempt",err_count,"of 10: Could not connect:", error, ";")
                     return False
                 else:
-                    print "Attempt",err_count,"of 10: Could not connect:", error, "; Retrying in 5s..."
+                    print ("Attempt",err_count,"of 10: Could not connect:", error, "; Retrying in 5s...")
                     time.sleep(5)
-
-
         return True
+
+
+    def close(self):
+        self.mindwaveMobileSocket.close()
+        self._isConnected = False
+        #self.mindwaveMobileSocket.shutdown(2)
 
 
     def isConnected(self):
@@ -74,9 +93,31 @@ class MindwaveMobileRawReader:
         receivedBytes = ""
         # Sometimes the socket will not send all the requested bytes
         # on the first request, therefore a loop is necessary...
+        #print('(read)',end='')
         while(missingBytes > 0):
-            receivedBytes += self.mindwaveMobileSocket.recv(missingBytes)
+            #print('\n(.REQ',missingBytes,')')
+            try:
+                receivedBytes += self.mindwaveMobileSocket.recv(missingBytes)
+            except:
+                print ("\n--- recev timed out! ---",datetime.now())
+                #receivedBytes += ['\n']*missingBytes
+                print("--- exit time out code ---")
+                print("--- Close connection ---")
+                self.close()
+                time.sleep(1)
+                print("--- Trying to re-connect ---")
+                if (self._connectToAddress(self._mindwaveMobileAddress)):
+                    print("--- Connected ---")
+                else:
+                    print('Terminating process')
+                    os.kill(os.getpid(), signal.SIGKILL)
+                    return receivedBytes
+                #time.sleep(10)
+                return receivedBytes
+                #return 170
             missingBytes = amountOfBytes - len(receivedBytes)
+            #print('--(GET',len(receivedBytes),',miss',missingBytes,')--',)
+        #print('e-read',end='')
         return receivedBytes;
 
     def peekByte(self):
@@ -84,12 +125,19 @@ class MindwaveMobileRawReader:
         return ord(self._buffer[self._bufferPosition])
 
     def getByte(self):
+        #print('s',end='')
         self._ensureMoreBytesCanBeRead(100);
+        #print('s',end='')
         return self._getNextByte();
 
     def  _ensureMoreBytesCanBeRead(self, amountOfBytes):
+        #print('r',end='')
         if (self._bufferSize() <= self._bufferPosition + amountOfBytes):
+        #    print('(ri)',end='')
             self._readMoreBytesIntoBuffer(amountOfBytes)
+        #    print('(ro)',end='')
+        #print('r2',end='')
+        return
 
     def _getNextByte(self):
         nextByte = ord(self._buffer[self._bufferPosition]);
@@ -97,6 +145,7 @@ class MindwaveMobileRawReader:
         return nextByte;
 
     def getBytes(self, amountOfBytes):
+        #print('-GBs-',end='')
         self._ensureMoreBytesCanBeRead(amountOfBytes);
         return self._getNextBytes(amountOfBytes);
 
@@ -110,6 +159,7 @@ class MindwaveMobileRawReader:
         self._bufferPosition = 0;
 
     def _bufferSize(self):
+        #print('(bsize=',len(self._buffer),')',end='')
         return len(self._buffer);
 
 #------------------------------------------------------------------------------
